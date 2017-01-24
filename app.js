@@ -6,7 +6,8 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 var google = require('google');
 var extractor = require('unfluff');
-var fetchUrl = require("fetch").fetchUrl;
+var cheerio = require('cheerio');
+var request = require('request');
 
 var routes = require('./routes/index');
 var users = require('./routes/users');
@@ -14,15 +15,11 @@ var users = require('./routes/users');
 var app = express();
 
 var dbcall = require('./api/get_aka');
+var dbpush = require('./api/push_data');
 
 
 
-
-
-
-// view engine setup
-//  app.set('views', path.join(__dirname, 'views'));
-// app.set('view engine', 'jade');
+/** Engine Setup **/
 
 app.engine('html', require('ejs').renderFile);
 app.set('view engine', 'html');
@@ -34,10 +31,17 @@ app.use(bodyParser.json());
 app.use(cookieParser());
  app.use(express.static(path.join(__dirname, 'public')));
 
+
+/** Public Variables **/
+
 var sources = [];
 var list = [];
-var data = [];
 var html;
+
+
+
+/** Sorting Methods **/
+
 
 var sourceString = function(){
   var string = 'site: ';
@@ -59,6 +63,12 @@ function getTrueKeys(obj) {
     return ret;
 }
 
+
+
+
+/* HTTP requests */
+
+
 app.post('/search', function (req, res) {
 
 
@@ -77,29 +87,8 @@ app.post('/search', function (req, res) {
       /*console.log(link.title + ' - ' + link.href)
       console.log(link.description + "\n")*/
     }
-         /*fetchUrl("https://www.npmjs.com/package/unfluff", function(error, meta, body){
-         });
 
-         data = extractor.lazy(html, 'en');
-
-         // Access whichever data elements you need directly.
-         console.log(data);
-         console.log(data.softTitle);
-         console.log(data.date);
-         console.log(data.copyright);
-         console.log(data.author);
-         console.log(data.publisher);
-         console.log(data.text);
-         console.log(data.image);
-         console.log(data.tags);
-         console.log(data.videos);
-         console.log(data.canonicalLink);
-         console.log(data.lang);
-         console.log(data.description);
-         console.log(data.favicon);*/
-         
          list = res.links;
-
 
 
          /*if (nextCounter < 4) {
@@ -107,26 +96,60 @@ app.post('/search', function (req, res) {
            if (res.next) res.next()
          }*/
   })
-
-
-
-})
-
-app.get('/searchReturn', function (req, res) {
-
-    /* var data = extractor(my_html_data, 'en'); */
-
-
-    res.json(list);
     
+    res.json(list);
+
+
 
 })
+
 
 app.post('/api', function (req, res) {
+    var dbData = [];
+    dbData.push(req.body.url);
+    dbData.push(req.body.com);
+    dbData.push(req.body.rate);
+    dbData.push(req.body.date);
+    dbData.push(req.body.tags);
+
+    /** dbData.push({
+      "url" : req.body.url,
+      "comment": req.body.com,
+      "rating" : req.body.rate,
+      "date" : req.body.date,
+      "tags" : req.body.tags
+      }); **/
+    
+    dbpush.pushData(req, dbData);
+
 
     dbcall.get_aka(req, res);
 
 })
 
+app.post('/unfluff', function (req, res) {
+    var url = req.body.unfluffUrl;
+     var dataContent=[];
+    request(url, function (error, response, body) {
+        if (!error && response.statusCode == 200) {
+            var $ = cheerio.load(body);
+            var html = $.html();
+            data = extractor(html, 'en');
+            var cleanText =  data.text.replace(/[\r\n]/g, '');
+            dataContent.push({
+                "title" : data.title,
+                "date": data.date,
+                "tags": data.tags,
+                "description": data.description,
+                "publisher" : data.publisher,
+                "text": cleanText
+            });
+            res.json(dataContent);
+
+        } else {
+            console.log("We’ve encountered an error: " + error);
+        }
+    });
+})
 
 module.exports = app;
